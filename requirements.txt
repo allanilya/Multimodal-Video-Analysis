@@ -1,11 +1,5 @@
-torch==2.1.0
-torchvision==0.16.0
-torchaudio==2.1.0
-
-# HuggingFace ecosystem (install in order)
-huggingface-hub==0.17.3
-transformers==4.35.2
-sentence-transformers==2.2.2
+# Minimal requirements for improved video analysis
+# Focused on Google's video understanding capabilities
 
 # Web Framework
 fastapi==0.104.1
@@ -14,30 +8,21 @@ python-multipart==0.0.6
 jinja2==3.1.2
 aiofiles==23.2.1
 
-# AI/ML APIs - Fixed versions
+# AI APIs - Core requirements only
 openai==1.6.1
-httpx==0.25.2
 google-generativeai==0.3.2
-
-# Video Processing - Updated PyTube
-youtube-transcript-api==0.6.1
-pytubefix==9.1.1
-moviepy==1.0.3
-opencv-python==4.8.1.78
-pillow==10.1.0
-
-# Scientific Computing
-numpy==1.24.3
-scikit-learn==1.3.2
 
 # Utilities
 python-dotenv==1.0.0
 requests==2.31.0
 pydantic==2.5.0
 
-# Note: FAISS removed as it can be problematic on M1
-# Using scikit-learn for similarity search instead
+# Optional: For fallback video info (if needed)
+pytubefix==6.10.2
 
-openai-whisper==20231117
-ffmpeg-python==0.2.0
-# Note: You must have ffmpeg installed on your system (brew install ffmpeg or apt install ffmpeg)
+# Note: Removed heavy dependencies:
+# - torch/transformers (not needed with Gemini)
+# - sentence-transformers (using OpenAI embeddings)
+# - opencv-python (not needed for direct video analysis)
+# - moviepy (not needed with Gemini video API)
+# - scikit-learn (simplified approach)
