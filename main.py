@@ -76,6 +76,13 @@ async def process_video(request: ProcessVideoRequest):
     try:
         logger.info(f"Processing video: {request.url}")
 
+        # Ensure API keys are configured
+        if not os.getenv("OPENAI_API_KEY") or not os.getenv("GOOGLE_API_KEY"):
+            raise HTTPException(
+                status_code=500,
+                detail="Missing API keys. Please set OPENAI_API_KEY and GOOGLE_API_KEY in the .env file."
+            )
+
         # Extract video ID first to validate URL
         video_id = video_processor.extract_video_id(request.url)
 
@@ -133,7 +140,10 @@ async def process_video(request: ProcessVideoRequest):
                 detail="This video is unavailable or private. Please try a different video."
             )
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to process video: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process video: {type(e).__name__}: {e}"
+            )
 
 @app.get("/api/video/{video_id}")
 async def get_video(video_id: str):

@@ -183,6 +183,8 @@ multimodal-video-analysis/
 4. **Memory Issues**
    - Large videos may require significant memory
    - Consider processing shorter videos for testing
+5. **Processing Error**
+   - If you receive "Failed to process video", verify your API keys are set and the video is accessible from your network
 
 ### Performance Optimization
 
