@@ -199,6 +199,7 @@ All dependencies are listed in `requirements.txt` with compatible versions that 
 - **FastAPI & Uvicorn**: Web framework and ASGI server
 - **OpenAI**: GPT-4 integration for chat and analysis
 - **Google Generative AI**: Gemini model for visual understanding
+- **Gemini Frame Descriptions**: Extracted frames are analyzed by Gemini, and the resulting descriptions are combined with transcripts when answering questions.
 - **PyTube**: YouTube video downloading
 - **youtube-transcript-api**: Extract video transcripts
 - **MoviePy**: Video file processing and frame extraction

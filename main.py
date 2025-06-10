@@ -92,7 +92,7 @@ async def process_video(request: ProcessVideoRequest):
                 "status": "success",
                 "message": "Video already processed",
                 "video_id": video_id,
-                "video_data": {"url": request.url},
+                "video_data": video_data[video_id].get("metadata", {"url": request.url}),
                 "sections": video_data[video_id]["sections"],
             }
 
@@ -181,8 +181,18 @@ async def chat(request: ChatRequest):
         response = video_processor.openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant analyzing video content. Always cite timestamps when referencing specific moments."},
-                {"role": "user", "content": f"Video context:\n{context}\n\nUser question: {request.message}"}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful assistant analyzing YouTube video content. "
+                        "You have access to the transcript and Gemini-generated descriptions of visual frames. "
+                        "Use this information to answer the user's questions and always cite timestamps when referencing specific moments."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Video context:\n{context}\n\nUser question: {request.message}"
+                },
             ]
         )
         
