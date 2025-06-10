@@ -1,0 +1,40 @@
+
+torch==2.1.0
+torchvision==0.16.0
+torchaudio==2.1.0
+
+# HuggingFace ecosystem (install in order)
+huggingface-hub==0.17.3
+transformers==4.35.2
+sentence-transformers==2.2.2
+
+# Web Framework
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+jinja2==3.1.2
+aiofiles==23.2.1
+
+# AI/ML APIs - Fixed versions
+openai==1.6.1
+httpx==0.25.2
+google-generativeai==0.3.2
+
+# Video Processing - Updated PyTube
+youtube-transcript-api==0.6.1
+pytubefix==9.1.1
+moviepy==1.0.3
+opencv-python==4.8.1.78
+pillow==10.1.0
+
+# Scientific Computing
+numpy==1.24.3
+scikit-learn==1.3.2
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+pydantic==2.5.0
+
+# Note: FAISS removed as it can be problematic on M1
+# Using scikit-learn for similarity search instead

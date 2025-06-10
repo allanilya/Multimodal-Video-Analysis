@@ -1,0 +1,10 @@
+
+.env
+venv/
+env/
+ENV/
+.venv/
+
+downloads/
+logs/
+temp/
