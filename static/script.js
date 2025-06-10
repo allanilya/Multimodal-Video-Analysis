@@ -17,6 +17,11 @@ class VideoAnalysisApp {
             this.processVideo();
         });
 
+        // New video button
+        document.getElementById('newVideoBtn').addEventListener('click', () => {
+            this.resetForNewVideo();
+        });
+
         // Enter key on URL input
         document.getElementById('videoUrl').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -59,6 +64,28 @@ class VideoAnalysisApp {
         });
     }
 
+    resetForNewVideo() {
+        // Clear current video data
+        this.currentVideoId = null;
+        this.currentVideoData = null;
+        this.sections = [];
+        
+        // Clear UI elements
+        document.getElementById('videoEmbed').innerHTML = '';
+        document.getElementById('sectionsList').innerHTML = '';
+        document.getElementById('chatMessages').innerHTML = '';
+        document.getElementById('searchResults').innerHTML = '';
+        document.getElementById('videoUrl').value = '';
+        
+        // Show/hide appropriate elements
+        document.getElementById('videoAnalysis').style.display = 'none';
+        document.getElementById('processBtn').style.display = 'inline-block';
+        document.getElementById('newVideoBtn').style.display = 'none';
+        
+        // Clear any error/success messages
+        this.removeMessages();
+    }
+
     async processVideo() {
         const videoUrl = document.getElementById('videoUrl').value.trim();
         if (!videoUrl) {
@@ -85,8 +112,9 @@ class VideoAnalysisApp {
                 this.sections = data.sections || [];
                 this.displayVideo(videoUrl);
                 this.displaySections(this.sections);
-                document.getElementById('urlInputSection').style.display = 'none';
                 document.getElementById('videoAnalysis').style.display = 'block';
+                document.getElementById('processBtn').style.display = 'none';
+                document.getElementById('newVideoBtn').style.display = 'inline-block';
                 this.showSuccess('Video processed successfully!');
                 this.hideProgress();
                 document.getElementById('searchContainer').style.display = 'block';
