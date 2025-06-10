@@ -211,39 +211,6 @@ All dependencies are listed in `requirements.txt` with compatible versions that 
 - **Jinja2**: Template engine
 - **Aiofiles**: Async file operations
 
-## Demo Walkthrough
-
-When presenting your demo, make sure to explain how you tackled each requirement:
-
-### 1. Frontend UI for YouTube Video Upload
-- **Implementation**: Clean, modern web interface with URL input validation
-- **Features**: Real-time feedback, loading indicators, error handling
-- **Technology**: HTML5, CSS3 with responsive design, vanilla JavaScript
-
-### 2. Section Breakdown with Hyperlinked Timestamps
-- **Implementation**: Used OpenAI GPT-4 to analyze transcript chunks and generate meaningful section titles and summaries
-- **Process**: 
-  1. Split transcript into ~1000 character chunks
-  2. Generate descriptive titles and summaries for each section
-  3. Create clickable sections that link to YouTube timestamps
-- **User Experience**: Left panel shows organized sections, click to jump to YouTube at specific time
-
-### 3. Chat with Timestamp Citations
-- **Implementation**: 
-  1. Vector search to find relevant content for user questions
-  2. Context-aware responses using OpenAI GPT-4
-  3. Citation system that links back to specific timestamps
-- **Process**: Query → Vector Search → Context Building → GPT-4 Response → Citation Formatting
-- **User Experience**: Natural conversation with clickable timestamp references
-
-### 4. Visual Content Search
-- **Implementation**:
-  1. Extract video frames at 30-second intervals using OpenCV
-  2. Generate descriptions using Google Gemini vision model
-  3. Create embeddings and enable semantic search
-- **Process**: Frame Extraction → Gemini Analysis → Embedding Creation → FAISS Indexing → Search Interface
-- **User Experience**: Natural language queries to find visual content (e.g., "person in red shirt")
-
 ## Architecture Overview
 
 ```
