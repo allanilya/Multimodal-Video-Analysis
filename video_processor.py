@@ -15,6 +15,7 @@ from sklearn.preprocessing import normalize
 from openai import OpenAI
 from dotenv import load_dotenv
 import subprocess
+import whisper
 
 load_dotenv()
 
@@ -35,8 +36,11 @@ class VideoProcessor:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.upload_dir = Path(os.getenv("UPLOAD_DIR", "./uploads"))
         self.temp_dir = Path(os.getenv("TEMP_DIR", "./temp"))
-        self.upload_dir.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True)
+        self.uploads_dir = Path("uploads")
+        self.uploads_dir.mkdir(exist_ok=True)
+        self.processed_videos = {}
+        self.whisper_model = whisper.load_model("base")
         
     def extract_video_id(self, youtube_url: str) -> str:
         """Extract video ID from YouTube URL"""
@@ -173,7 +177,6 @@ class VideoProcessor:
         }
     
     def get_transcript(self, video_id: str, video_path: Optional[str] = None) -> List[Dict[str, Any]]:
-        # Only use Whisper for audio transcription
         if video_path and Path(video_path).exists():
             print(f"[Transcript] Using Whisper transcription for video ID: {video_id}")
             audio_path = str(self.temp_dir / f"{video_id}.wav")
@@ -185,174 +188,72 @@ class VideoProcessor:
         print("[Transcript] No transcript available for this video.")
         return []
     
-    def extract_frames(self, video_path: str, interval: int = 15, max_frames: int = 40) -> List[Dict[str, Any]]:
-        """Extract frames from video at specified intervals (default 15s, max 40 frames)"""
-        if not video_path or not Path(video_path).exists():
-            print("No video file available - skipping frame extraction")
-            return []
+    def extract_frames(self, video_path: str) -> List[Dict[str, Any]]:
         frames_data = []
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"Could not open video file: {video_path}")
-            return []
+            print("Error: Could not open video file.")
+            return frames_data
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         duration = total_frames / fps
         print(f"Video info: {duration:.1f}s duration, {fps:.1f} fps")
+        frame_interval = 40  # Extract a frame every 60 seconds (optimized for speed)
         frame_count = 0
-        extracted_count = 0
-        extracted_timestamps = []
-        while True:
+        for i in range(0, int(duration), frame_interval):
+            cap.set(cv2.CAP_PROP_POS_MSEC, i * 1000)
             ret, frame = cap.read()
-            if not ret or len(frames_data) >= max_frames:
-                break
-            timestamp = frame_count / fps
-            # Extract frame at intervals
-            if frame_count % (fps * interval) == 0:
-                frame_path = self.temp_dir / f"frame_{int(timestamp)}.jpg"
-                cv2.imwrite(str(frame_path), frame)
-                # Encode frame as base64 for Gemini
-                _, buffer = cv2.imencode('.jpg', frame)
-                frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            if ret:
+                frame_count += 1
+                print(f"Extracted frame at {i:.1f}s ({frame_count})")
                 frames_data.append({
-                    "timestamp": timestamp,
-                    "frame_path": str(frame_path),
-                    "frame_base64": frame_base64
+                    "timestamp": i,
+                    "frame": frame
                 })
-                extracted_count += 1
-                extracted_timestamps.append(timestamp)
-                print(f"Extracted frame at {timestamp:.1f}s ({extracted_count}/{max_frames})")
-            frame_count += 1
         cap.release()
-        print(f"Extracted {len(frames_data)} frames from video (every {interval}s, max {max_frames})")
-        print(f"Extracted frame timestamps: {[f'{t:.1f}' for t in extracted_timestamps]}")
+        print(f"Extracted {frame_count} frames from video (every {frame_interval}s)")
         return frames_data
     
-    def generate_section_breakdown(self, transcript: List[Dict], video_metadata: Dict) -> List[Dict[str, Any]]:
-        """Generate section breakdown using OpenAI and visual analysis if no transcript"""
-        
-        # If we have transcript, use it
-        if transcript and len(transcript) > 0:
-            return self.generate_sections_from_transcript(transcript, video_metadata)
-        
-        # If no transcript, use visual analysis
-        print("No transcript available - generating sections from visual analysis")
-        return self.generate_sections_from_frames(video_metadata)
-    
-    def generate_sections_from_transcript(self, transcript: List[Dict], video_metadata: Dict) -> List[Dict[str, Any]]:
-        """Generate sections from transcript (original method)"""
-        text_chunks = []
-        current_chunk = ""
-        chunk_start_time = 0
-        
-        for entry in transcript:
-            if len(current_chunk) > 1000:  # ~1000 char chunks
-                text_chunks.append({
-                    "text": current_chunk,
-                    "start_time": chunk_start_time,
-                    "end_time": entry["start"]
-                })
-                current_chunk = entry["text"]
-                chunk_start_time = entry["start"]
-            else:
-                current_chunk += " " + entry["text"]
-        
-        if current_chunk:
-            text_chunks.append({
-                "text": current_chunk,
-                "start_time": chunk_start_time,
-                "end_time": transcript[-1]["start"] + transcript[-1]["duration"]
-            })
-        
-        # Generate sections using OpenAI
-        sections = []
-        for i, chunk in enumerate(text_chunks):
-            try:
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are analyzing a video transcript. Create a concise, descriptive title for this section (max 8 words) and a brief summary (max 50 words)."
-                        },
-                        {
-                            "role": "user",
-                            "content": f"Video title: {video_metadata['title']}\n\nTranscript section:\n{chunk['text']}"
-                        }
-                    ],
-                    temperature=0.3
-                )
-                
-                content = response.choices[0].message.content
-                lines = content.strip().split('\n')
-                title = lines[0] if lines else f"Section {i+1}"
-                summary = lines[1] if len(lines) > 1 else ""
-                
-                sections.append({
-                    "title": title.replace("Title:", "").replace("**", "").strip(),
-                    "summary": summary.replace("Summary:", "").replace("**", "").strip(),
-                    "start_time": chunk["start_time"],
-                    "end_time": chunk["end_time"],
-                    "transcript_text": chunk["text"]
-                })
-            except Exception as e:
-                print(f"Error generating section {i}: {str(e)}")
-                sections.append({
-                    "title": f"Section {i+1}",
-                    "summary": "Content analysis unavailable",
-                    "start_time": chunk["start_time"],
-                    "end_time": chunk["end_time"],
-                    "transcript_text": chunk["text"]
-                })
-        
-        return sections
-    
-    def generate_sections_from_frames(self, video_metadata: Dict) -> List[Dict[str, Any]]:
-        """Generate sections using visual analysis when no transcript is available (denser frames, limited)"""
-        try:
-            # Extract more frames for analysis (every 15 seconds, max 40 frames)
-            frames = self.extract_frames(video_metadata["video_path"], interval=15, max_frames=40)
+    def generate_section_breakdown(self, transcript: List[Dict[str, Any]], video_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if not transcript:
+            print("No transcript available - generating sections from visual analysis")
+            frames = self.extract_frames(video_metadata["video_path"])
             if not frames:
-                print("No frames extracted for visual section generation.")
                 return []
-            print(f"Generating sections from {len(frames)} frames...")
             sections = []
-            duration = video_metadata.get("duration", 0)
-            for i, frame in enumerate(frames):
-                try:
-                    print(f"[Gemini] Analyzing frame {i+1}/{len(frames)} at {frame['timestamp']:.1f}s...")
-                    image_part = genai.types.BlobDict(
-                        mime_type="image/jpeg",
-                        data=base64.b64decode(frame["frame_base64"])
-                    )
-                    response = self.gemini_model.generate_content([
-                        f"Analyze this frame from a video titled '{video_metadata['title']}'. Provide a brief title (max 6 words) and description (max 40 words) of what's happening:",
-                        image_part
-                    ])
-                    print(f"[Gemini] Response for frame {i+1}: {response.text}")
-                    if response.text:
-                        lines = response.text.strip().split('\n')
-                        title = lines[0] if lines else f"Visual Section {i+1}"
-                        description = lines[1] if len(lines) > 1 else "Visual content analysis"
-                        start_time = frame["timestamp"]
-                        end_time = frames[i+1]["timestamp"] if i+1 < len(frames) else duration
-                        sections.append({
-                            "title": title.replace("Title:", "").replace("**", "").strip(),
-                            "summary": description.replace("Description:", "").replace("**", "").strip(),
-                            "start_time": start_time,
-                            "end_time": end_time,
-                            "transcript_text": f"Visual content at {start_time:.0f}s: {description}"
-                        })
-                        print(f"Generated visual section: {title} ({start_time:.1f}s - {end_time:.1f}s)")
-                except Exception as e:
-                    print(f"Error analyzing frame {i}: {str(e)}")
-            print(f"Total sections generated: {len(sections)}")
-            for sec in sections:
-                print(f"Section: {sec['title']} | {sec['start_time']:.1f}s - {sec['end_time']:.1f}s")
+            for frame in frames:
+                print(f"[Gemini] Analyzing frame at {frame['timestamp']:.1f}s...")
+                prompt = f"Analyze this video frame and provide a title and description. Frame timestamp: {frame['timestamp']:.1f}s"
+                response = self.gemini_model.generate_content(prompt)
+                if response and response.text:
+                    sections.append({
+                        "title": response.text.split('\n')[0].replace('**Title:**', '').strip(),
+                        "start": frame['timestamp'],
+                        "end": frame['timestamp'] + 30,  # Assume 30s per section
+                        "transcript_text": f"Visual content at {frame['timestamp']:.1f}s: {response.text}"
+                    })
             return sections
-        except Exception as e:
-            print(f"Error generating visual sections: {str(e)}")
-            return []
+        else:
+            # Use OpenAI to generate sections from transcript
+            # Limit transcript to first 500 characters to avoid context length errors
+            limited_transcript = transcript[:500]
+            prompt = f"Generate a section breakdown for this video transcript:\n{limited_transcript}"
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",  # Use a simpler model for faster processing
+                messages=[{"role": "user", "content": prompt}]
+            )
+            sections = []
+            for line in response.choices[0].message.content.split('\n'):
+                if '|' in line:
+                    title, time_range = line.split('|')
+                    start, end = time_range.split('-')
+                    sections.append({
+                        "title": title.strip(),
+                        "start": float(start.replace('s', '')),
+                        "end": float(end.replace('s', '')),
+                        "transcript_text": f"Transcript section: {title.strip()}"
+                    })
+            return sections
     
     def create_embeddings(self, sections: List[Dict], frames_data: List[Dict]) -> Dict[str, Any]:
         """Create embeddings for text and visual content using scikit-learn"""
@@ -471,7 +372,7 @@ class VideoProcessor:
         # If we have very little content, analyze more frames
         if len(relevant_content) < 2:
             print("Limited content found, analyzing additional frames...")
-            additional_frames = self.extract_frames(video_metadata["video_path"], interval=120)  # Every 2 minutes
+            additional_frames = self.extract_frames(video_metadata["video_path"])
             
             for frame in additional_frames[:3]:  # Analyze first 3 frames
                 try:
@@ -569,22 +470,15 @@ class VideoProcessor:
             print(f"Audio extraction failed: {str(e)}")
             return False
     
-    def whisper_transcribe(self, audio_path: str) -> list:
-        """Transcribe audio using OpenAI Whisper API"""
+    def whisper_transcribe(self, audio_path: str) -> List[Dict[str, Any]]:
         try:
-            client = self.openai_client
-            with open(audio_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json"
-                )
-            print(f"Whisper transcript received with {len(transcript['segments'])} segments")
-            # Convert Whisper segments to youtube-transcript-api format
-            return [
-                {"text": seg["text"], "start": seg["start"], "duration": seg["end"] - seg["start"]}
-                for seg in transcript["segments"]
-            ]
+            print(f"Transcribing audio with Whisper: {audio_path}")
+            result = self.whisper_model.transcribe(audio_path)
+            if result and 'segments' in result:
+                return result['segments']
+            else:
+                print("Whisper transcription failed: No segments found.")
+                return []
         except Exception as e:
             print(f"Whisper transcription failed: {str(e)}")
             return []

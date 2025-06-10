@@ -89,6 +89,7 @@ class VideoAnalysisApp {
                 document.getElementById('videoAnalysis').style.display = 'block';
                 this.showSuccess('Video processed successfully!');
                 this.hideProgress();
+                document.getElementById('searchContainer').style.display = 'block';
             } else {
                 this.showError(data.message || 'Failed to process video');
                 this.showProgress('Error: ' + (data.message || 'Failed to process video'));
