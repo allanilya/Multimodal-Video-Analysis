@@ -4,7 +4,9 @@ venv/
 env/
 ENV/
 .venv/
-
 downloads/
 logs/
 temp/
+uploads
+uploads/
+.uploads/
