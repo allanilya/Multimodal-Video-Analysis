@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multimodal Video Analysis System</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/static/style.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="container">
@@ -13,99 +13,46 @@
             <h1><i class="fas fa-video"></i> Multimodal Video Analysis System</h1>
             <p>Upload a YouTube video and interact with its content through AI-powered analysis</p>
         </header>
-
-        <!-- URL Input Section -->
         <section class="url-input-section" id="urlInputSection">
             <div class="input-group">
-                <input type="url" id="videoUrl" placeholder="Enter YouTube video URL..." 
-                       class="url-input" required>
+                <input type="url" id="videoUrl" placeholder="Enter YouTube video URL..." class="url-input" required>
                 <button id="processBtn" class="process-btn">
                     <i class="fas fa-play"></i> Process Video
                 </button>
             </div>
-            <div class="loading" id="loadingIndicator" style="display: none;">
-                <i class="fas fa-spinner fa-spin"></i>
-                <span>Processing video... This may take a few minutes.</span>
-            </div>
+            <div class="loading" id="loadingIndicator" style="display: none;"></div>
+            <div id="progressIndicator" class="progress-indicator" style="display: none;"></div>
         </section>
-
-        <!-- Video Analysis Section -->
         <section class="video-analysis" id="videoAnalysis" style="display: none;">
-            <!-- Video Information -->
-            <div class="video-info">
-                <h2 id="videoTitle">Video Title</h2>
-                <p id="videoDescription">Video Description</p>
-                <div class="video-meta">
-                    <span id="videoDuration">Duration: --:--</span>
-                    <a id="videoLink" href="#" target="_blank">
-                        <i class="fas fa-external-link-alt"></i> View on YouTube
-                    </a>
-                </div>
-            </div>
-
-            <!-- Main Content Area -->
+            <div class="video-embed" id="videoEmbed"></div>
             <div class="main-content">
-                <!-- Left Panel: Sections -->
-                <div class="left-panel">
+                <aside class="sections-list" id="sectionsListContainer">
                     <h3><i class="fas fa-list"></i> Video Sections</h3>
-                    <div id="sectionsList" class="sections-list">
-                        <!-- Sections will be populated here -->
+                    <div id="sectionsList"></div>
+                </aside>
+                <div class="tabs-container">
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="chat">Chat</button>
+                        <button class="tab-btn" data-tab="visual-search">Visual Search</button>
                     </div>
-                </div>
-
-                <!-- Right Panel: Chat and Search -->
-                <div class="right-panel">
-                    <!-- Tab Navigation -->
-                    <div class="tab-nav">
-                        <button class="tab-btn active" data-tab="chat">
-                            <i class="fas fa-comments"></i> Chat
-                        </button>
-                        <button class="tab-btn" data-tab="search">
-                            <i class="fas fa-search"></i> Visual Search
-                        </button>
-                    </div>
-
-                    <!-- Chat Tab -->
-                    <div id="chatTab" class="tab-content active">
-                        <div class="chat-container">
-                            <div id="chatMessages" class="chat-messages">
-                                <div class="chat-message bot">
-                                    <i class="fas fa-robot"></i>
-                                    <div class="message-content">
-                                        <p>Hello! I'm ready to answer questions about this video. What would you like to know?</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="chat-input-container">
-                                <input type="text" id="chatInput" placeholder="Ask me anything about the video..." 
-                                       class="chat-input">
-                                <button id="sendChatBtn" class="send-btn">
-                                    <i class="fas fa-paper-plane"></i>
-                                </button>
-                            </div>
+                    <div class="tab-content active" id="chatTab">
+                        <div id="chatMessages" class="chat-messages"></div>
+                        <div class="chat-input-group">
+                            <input type="text" id="chatInput" placeholder="Ask me anything about the video...">
+                            <button id="sendChatBtn"><i class="fas fa-paper-plane"></i></button>
                         </div>
                     </div>
-
-                    <!-- Search Tab -->
-                    <div id="searchTab" class="tab-content">
-                        <div class="search-container">
-                            <div class="search-input-container">
-                                <input type="text" id="searchInput" placeholder="Describe what you're looking for in the video..." 
-                                       class="search-input">
-                                <button id="searchBtn" class="search-btn">
-                                    <i class="fas fa-search"></i> Search
-                                </button>
-                            </div>
-                            <div id="searchResults" class="search-results">
-                                <!-- Search results will be populated here -->
-                            </div>
+                    <div class="tab-content" id="visual-searchTab">
+                        <div class="visual-search-input-group">
+                            <input type="text" id="searchInput" placeholder="Describe a scene or object...">
+                            <button id="searchBtn"><i class="fas fa-search"></i></button>
                         </div>
+                        <div id="searchResults" class="search-results"></div>
                     </div>
                 </div>
             </div>
         </section>
     </div>
-
     <script src="/static/script.js"></script>
 </body>
 </html>
