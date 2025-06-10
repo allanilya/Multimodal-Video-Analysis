@@ -35,10 +35,10 @@ async def lifespan(app: FastAPI):
     os.makedirs("temp", exist_ok=True)
     os.makedirs("static", exist_ok=True)
     os.makedirs("templates", exist_ok=True)
-    
+
     # Initialize video processor
     video_processor = VideoProcessor()
-    
+
     logger.info("Application started")
     yield
     # Shutdown
@@ -76,6 +76,13 @@ async def process_video(request: ProcessVideoRequest):
     try:
         logger.info(f"Processing video: {request.url}")
 
+        # Ensure API keys are configured
+        if not os.getenv("OPENAI_API_KEY") or not os.getenv("GOOGLE_API_KEY"):
+            raise HTTPException(
+                status_code=500,
+                detail="Missing API keys. Please set OPENAI_API_KEY and GOOGLE_API_KEY in the .env file.",
+            )
+
         # Extract video ID first to validate URL
         video_id = video_processor.extract_video_id(request.url)
 
@@ -85,7 +92,7 @@ async def process_video(request: ProcessVideoRequest):
                 "status": "success",
                 "message": "Video already processed",
                 "video_id": video_id,
-                "video_data": {"url": request.url},
+                "video_data": video_data[video_id].get("metadata", {"url": request.url}),
                 "sections": video_data[video_id]["sections"],
             }
 
@@ -113,18 +120,18 @@ async def process_video(request: ProcessVideoRequest):
             "video_data": {"url": request.url},
             "sections": result["sections"],
         }
-        
+
     except ValueError as e:
         logger.error(f"Invalid URL: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error processing video: {e}")
         logger.error(traceback.format_exc())
-        
+
         # Provide more specific error messages
         if "HTTP Error 400" in str(e):
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail="Failed to download video. This might be due to YouTube restrictions or an outdated downloader. Try updating pytube or using a different video."
             )
         elif "unavailable" in str(e).lower():
@@ -133,14 +140,17 @@ async def process_video(request: ProcessVideoRequest):
                 detail="This video is unavailable or private. Please try a different video."
             )
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to process video: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process video: {type(e).__name__}: {e}"
+            )
 
 @app.get("/api/video/{video_id}")
 async def get_video(video_id: str):
     """Get video data."""
     if video_id not in video_data:
         raise HTTPException(status_code=404, detail="Video not found")
-    
+
     # Return serializable data only
     data = {k: v for k, v in video_data[video_id].items() if not k.startswith("_")}
     return {"status": "success", "video": data}
@@ -151,31 +161,41 @@ async def chat(request: ChatRequest):
     try:
         if request.video_id not in video_data:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         video_info = video_data[request.video_id]
-        
+
         # Prepare context from transcript and visual descriptions
         context_parts = []
-        
+
         # Add relevant transcript segments
         for segment in video_info["transcript"][:50]:  # Limit context
             context_parts.append(f"[{segment['start']}s] {segment['text']}")
-        
+
         # Add frame descriptions
         for frame in video_info["frame_descriptions"]:
             context_parts.append(f"[{frame['timestamp']}s - Visual] {frame['description']}")
-        
+
         context = "\n".join(context_parts)
-        
+
         # Generate response using OpenAI
         response = video_processor.openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant analyzing video content. Always cite timestamps when referencing specific moments."},
-                {"role": "user", "content": f"Video context:\n{context}\n\nUser question: {request.message}"}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful assistant analyzing YouTube video content. "
+                        "You have access to the transcript and Gemini-generated descriptions of visual frames. "
+                        "Use this information to answer the user's questions and always cite timestamps when referencing specific moments."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Video context:\n{context}\n\nUser question: {request.message}"
+                },
             ]
         )
-        
+
         return {
             "status": "success",
             "response": {
@@ -183,7 +203,7 @@ async def chat(request: ChatRequest):
                 "citations": []  # You can enhance this to extract timestamps from the response
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -194,20 +214,20 @@ async def search(request: SearchRequest):
     try:
         if request.video_id not in video_data:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         video_info = video_data[request.video_id]
-        
+
         # Check if embeddings exist
         if "_embeddings" not in video_info:
             raise HTTPException(status_code=400, detail="Search index not available for this video")
-        
+
         # Create query embedding
         query_embedding = video_processor.sentence_model.encode([request.query])
-        
+
         # Search using FAISS
         k = min(5, len(video_info["metadata"]))  # Return top 5 results
         distances, indices = video_info["_search_index"].search(query_embedding, k)
-        
+
         # Get results
         results = []
         for idx in indices[0]:
@@ -218,12 +238,12 @@ async def search(request: SearchRequest):
                     "type": metadata["type"],
                     "content": metadata["content"]
                 })
-        
+
         return {
             "status": "success",
             "results": results,
         }
-        
+
     except Exception as e:
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
