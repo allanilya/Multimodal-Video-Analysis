@@ -2,6 +2,7 @@ class VideoAnalysisApp {
     constructor() {
         this.currentVideoId = null;
         this.currentVideoData = null;
+        this.sections = [];
         this.init();
     }
 
@@ -50,24 +51,12 @@ class VideoAnalysisApp {
         const tabBtns = document.querySelectorAll('.tab-btn');
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const tabName = btn.dataset.tab;
-                this.switchTab(tabName);
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
             });
         });
-    }
-
-    switchTab(tabName) {
-        // Update tab buttons
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-
-        // Update tab content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(`${tabName}Tab`).classList.add('active');
     }
 
     async processVideo() {
@@ -76,56 +65,48 @@ class VideoAnalysisApp {
             this.showError('Please enter a YouTube URL');
             return;
         }
-
         if (!this.isValidYouTubeUrl(videoUrl)) {
             this.showError('Please enter a valid YouTube URL');
             return;
         }
-
         this.showLoading(true);
+        this.showProgress('Processing video...');
         document.getElementById('processBtn').disabled = true;
-
         try {
             const response = await fetch('/api/process-video', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: videoUrl })
             });
-
             const data = await response.json();
-
             if (data.status === 'success') {
                 this.currentVideoId = data.video_id;
                 this.currentVideoData = data.video_data;
-                this.displayVideoAnalysis(data.video_data, data.sections);
+                this.sections = data.sections || [];
+                this.displayVideo(videoUrl);
+                this.displaySections(this.sections);
+                document.getElementById('urlInputSection').style.display = 'none';
+                document.getElementById('videoAnalysis').style.display = 'block';
                 this.showSuccess('Video processed successfully!');
+                this.hideProgress();
             } else {
                 this.showError(data.message || 'Failed to process video');
+                this.showProgress('Error: ' + (data.message || 'Failed to process video'));
             }
         } catch (error) {
             console.error('Error processing video:', error);
             this.showError('Network error. Please try again.');
+            this.showProgress('Network error. Please try again.');
         } finally {
             this.showLoading(false);
             document.getElementById('processBtn').disabled = false;
         }
     }
 
-    displayVideoAnalysis(videoData, sections) {
-        // Hide URL input and show analysis
-        document.getElementById('urlInputSection').style.display = 'none';
-        document.getElementById('videoAnalysis').style.display = 'block';
-
-        // Update video info
-        document.getElementById('videoTitle').textContent = videoData.title;
-        document.getElementById('videoDescription').textContent = videoData.description || 'No description available';
-        document.getElementById('videoDuration').textContent = `Duration: ${this.formatDuration(videoData.duration)}`;
-        document.getElementById('videoLink').href = videoData.url;
-
-        // Display sections
-        this.displaySections(sections);
+    displayVideo(videoUrl) {
+        const videoId = this.extractVideoId(videoUrl);
+        const embedHtml = `<iframe width="100%" height="360" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+        document.getElementById('videoEmbed').innerHTML = embedHtml;
     }
 
     displaySections(sections) {
@@ -137,15 +118,12 @@ class VideoAnalysisApp {
             return;
         }
 
-        sections.forEach((section, index) => {
+        sections.forEach((section, idx) => {
             const sectionItem = document.createElement('div');
             sectionItem.className = 'section-item';
             sectionItem.innerHTML = `
                 <div class="section-title">${section.title}</div>
-                <div class="section-time">
-                    <i class="far fa-clock"></i> 
-                    ${this.formatTime(section.start_time)} - ${this.formatTime(section.end_time)}
-                </div>
+                <div class="section-time"><i class="far fa-clock"></i> ${this.formatTime(section.start_time)} - ${this.formatTime(section.end_time)}</div>
                 <div class="section-summary">${section.summary}</div>
             `;
 
@@ -176,13 +154,8 @@ class VideoAnalysisApp {
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    video_id: this.currentVideoId,
-                    message: message
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_id: this.currentVideoId, message })
             });
 
             const data = await response.json();
@@ -286,13 +259,8 @@ class VideoAnalysisApp {
         try {
             const response = await fetch('/api/search', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    video_id: this.currentVideoId,
-                    query: query
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_id: this.currentVideoId, query })
             });
 
             const data = await response.json();
@@ -357,27 +325,16 @@ class VideoAnalysisApp {
         }
     }
 
+    extractVideoId(url) {
+        const match = url.match(/(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([\w-]{11})/);
+        return match ? match[1] : '';
+    }
+
     formatTime(seconds) {
+        if (typeof seconds !== 'number' || isNaN(seconds)) return '--:--';
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
         return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-    }
-
-    formatDuration(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const remainingSeconds = seconds % 60;
-
-        if (hours > 0) {
-            return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-        } else {
-            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-        }
-    }
-
-    isValidYouTubeUrl(url) {
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+/;
-        return youtubeRegex.test(url);
     }
 
     showLoading(show) {
@@ -424,6 +381,28 @@ class VideoAnalysisApp {
     removeMessages() {
         const messages = document.querySelectorAll('.error-message, .success-message');
         messages.forEach(msg => msg.remove());
+    }
+
+    showProgress(message) {
+        let progressDiv = document.getElementById('progressIndicator');
+        if (!progressDiv) {
+            progressDiv = document.createElement('div');
+            progressDiv.id = 'progressIndicator';
+            progressDiv.className = 'progress-indicator';
+            document.querySelector('.url-input-section').appendChild(progressDiv);
+        }
+        progressDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${message}`;
+        progressDiv.style.display = 'block';
+    }
+
+    hideProgress() {
+        const progressDiv = document.getElementById('progressIndicator');
+        if (progressDiv) progressDiv.style.display = 'none';
+    }
+
+    isValidYouTubeUrl(url) {
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)[\w-]+/;
+        return youtubeRegex.test(url);
     }
 }
 

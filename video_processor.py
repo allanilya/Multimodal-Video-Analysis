@@ -14,6 +14,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from openai import OpenAI
 from dotenv import load_dotenv
+import subprocess
 
 load_dotenv()
 
@@ -47,138 +48,199 @@ class VideoProcessor:
             raise ValueError("Invalid YouTube URL format")
     
     def download_youtube_video(self, youtube_url: str) -> Dict[str, Any]:
-        """Download YouTube video and extract metadata with better error handling"""
+        """Download YouTube video and extract metadata with fallback to transcript-only mode and Whisper"""
         try:
             video_id = self.extract_video_id(youtube_url)
             print(f"Attempting to download video ID: {video_id}")
-            
-            # Try different approaches for YouTube download
             yt = None
             for attempt in range(3):
                 try:
-                    print(f"Download attempt {attempt + 1}")
+                    print(f"Info retrieval attempt {attempt + 1}")
                     yt = YouTube(youtube_url, use_oauth=False, allow_oauth_cache=False)
-                    
-                    # Test if we can access video info
                     title = yt.title
-                    print(f"Video title: {title}")
+                    duration = yt.length
+                    description = yt.description or "No description available"
+                    print(f"Video info retrieved: {title}")
                     break
                 except Exception as e:
-                    print(f"Attempt {attempt + 1} failed: {str(e)}")
+                    print(f"Info attempt {attempt + 1} failed: {str(e)}")
                     if attempt == 2:
-                        raise Exception(f"Failed to access video after 3 attempts: {str(e)}")
+                        print("Falling back to transcript-only mode...")
+                        return self.transcript_only_fallback(video_id, youtube_url)
                     continue
-            
-            if not yt:
-                raise Exception("Could not create YouTube object")
-            
-            # Get available streams
+            video_path = None
             try:
                 streams = yt.streams.filter(file_extension='mp4', progressive=True)
                 if not streams:
-                    # Try adaptive streams if progressive not available
                     streams = yt.streams.filter(file_extension='mp4', adaptive=True)
-                    
                 if not streams:
-                    raise Exception("No MP4 streams available for this video")
-                
-                # Get the best quality stream
-                video_stream = streams.get_highest_resolution()
-                if not video_stream:
-                    video_stream = streams.first()
-                    
-                print(f"Selected stream: {video_stream.resolution}, {video_stream.filesize} bytes")
-                
-            except Exception as e:
-                raise Exception(f"Failed to get video streams: {str(e)}")
-            
-            # Download video
-            try:
+                    print("No streams available - using transcript-only mode")
+                    return self.create_transcript_only_response(video_id, yt, youtube_url)
+                video_stream = streams.get_highest_resolution() or streams.first()
+                print(f"Selected stream: {video_stream.resolution}")
                 video_path = self.upload_dir / f"{video_id}.mp4"
                 print(f"Downloading to: {video_path}")
-                
                 video_stream.download(
                     output_path=str(self.upload_dir), 
                     filename=f"{video_id}.mp4"
                 )
-                
-                # Verify file was downloaded
                 if not video_path.exists():
                     raise Exception("Video file was not created")
-                    
-                file_size = video_path.stat().st_size
-                print(f"Downloaded successfully: {file_size} bytes")
-                
+                print(f"Downloaded successfully: {video_path.stat().st_size} bytes")
             except Exception as e:
-                raise Exception(f"Failed to download video file: {str(e)}")
-            
-            # Get transcript
+                print(f"Video download failed: {str(e)}")
+                print("Continuing with transcript-only mode...")
+                return self.create_transcript_only_response(video_id, yt, youtube_url)
             print("Getting transcript...")
-            transcript = self.get_transcript(video_id)
-            
+            transcript = self.get_transcript(video_id, str(video_path))
             return {
                 "video_id": video_id,
                 "title": yt.title,
                 "description": yt.description or "No description available",
                 "duration": yt.length,
-                "video_path": str(video_path),
+                "video_path": str(video_path) if video_path else None,
                 "transcript": transcript,
-                "url": youtube_url
+                "url": youtube_url,
+                "mode": "full"
             }
-            
         except Exception as e:
             print(f"Error in download_youtube_video: {str(e)}")
-            raise Exception(f"Error downloading video: {str(e)}")
+            return self.transcript_only_fallback(video_id if 'video_id' in locals() else None, youtube_url)
     
-    def get_transcript(self, video_id: str) -> List[Dict[str, Any]]:
-        """Get transcript using youtube-transcript-api"""
+    def transcript_only_fallback(self, video_id: str, youtube_url: str) -> Dict[str, Any]:
+        """Fallback to transcript-only mode when video download fails, with Whisper support"""
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            return transcript_list
+            if not video_id:
+                video_id = self.extract_video_id(youtube_url)
+            print(f"Attempting transcript-only mode for: {video_id}")
+            # Try to get transcript from YouTube, fallback to Whisper if needed
+            transcript = self.get_transcript(video_id)
+            if not transcript:
+                # Try to download video for Whisper
+                try:
+                    yt = YouTube(youtube_url, use_oauth=False, allow_oauth_cache=False)
+                    streams = yt.streams.filter(file_extension='mp4', progressive=True)
+                    if not streams:
+                        streams = yt.streams.filter(file_extension='mp4', adaptive=True)
+                    if streams:
+                        video_stream = streams.get_highest_resolution() or streams.first()
+                        video_path = self.upload_dir / f"{video_id}.mp4"
+                        video_stream.download(
+                            output_path=str(self.upload_dir), 
+                            filename=f"{video_id}.mp4"
+                        )
+                        transcript = self.get_transcript(video_id, str(video_path))
+                except Exception as e:
+                    print(f"Could not download video for Whisper fallback: {str(e)}")
+            if not transcript:
+                raise Exception("No transcript available for this video (YouTube or Whisper)")
+            try:
+                yt = YouTube(youtube_url, use_oauth=False, allow_oauth_cache=False)
+                title = yt.title
+                description = yt.description or "No description available"
+                duration = yt.length
+            except:
+                title = f"Video {video_id}"
+                description = "Description unavailable"
+                duration = 0
+            return {
+                "video_id": video_id,
+                "title": title,
+                "description": description,
+                "duration": duration,
+                "video_path": None,
+                "transcript": transcript,
+                "url": youtube_url,
+                "mode": "transcript_only"
+            }
         except Exception as e:
-            print(f"Could not retrieve transcript: {str(e)}")
-            return []
+            raise Exception(f"Could not process video in any mode: {str(e)}")
     
-    def extract_frames(self, video_path: str, interval: int = 30) -> List[Dict[str, Any]]:
-        """Extract frames from video at specified intervals"""
+    def create_transcript_only_response(self, video_id: str, yt: YouTube, youtube_url: str) -> Dict[str, Any]:
+        """Create response for transcript-only mode with YouTube object"""
+        print("Creating transcript-only response...")
+        transcript = self.get_transcript(video_id)
+        
+        return {
+            "video_id": video_id,
+            "title": yt.title,
+            "description": yt.description or "No description available",
+            "duration": yt.length,
+            "video_path": None,
+            "transcript": transcript,
+            "url": youtube_url,
+            "mode": "transcript_only"
+        }
+    
+    def get_transcript(self, video_id: str, video_path: Optional[str] = None) -> List[Dict[str, Any]]:
+        # Only use Whisper for audio transcription
+        if video_path and Path(video_path).exists():
+            print(f"[Transcript] Using Whisper transcription for video ID: {video_id}")
+            audio_path = str(self.temp_dir / f"{video_id}.wav")
+            if self.extract_audio(video_path, audio_path):
+                whisper_transcript = self.whisper_transcribe(audio_path)
+                if whisper_transcript:
+                    print(f"[Transcript] Whisper transcript generated with {len(whisper_transcript)} segments.")
+                    return whisper_transcript
+        print("[Transcript] No transcript available for this video.")
+        return []
+    
+    def extract_frames(self, video_path: str, interval: int = 15, max_frames: int = 40) -> List[Dict[str, Any]]:
+        """Extract frames from video at specified intervals (default 15s, max 40 frames)"""
+        if not video_path or not Path(video_path).exists():
+            print("No video file available - skipping frame extraction")
+            return []
         frames_data = []
         cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Could not open video file: {video_path}")
+            return []
         fps = cap.get(cv2.CAP_PROP_FPS)
-        
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps
+        print(f"Video info: {duration:.1f}s duration, {fps:.1f} fps")
         frame_count = 0
+        extracted_count = 0
+        extracted_timestamps = []
         while True:
             ret, frame = cap.read()
-            if not ret:
+            if not ret or len(frames_data) >= max_frames:
                 break
-                
             timestamp = frame_count / fps
-            
             # Extract frame at intervals
             if frame_count % (fps * interval) == 0:
                 frame_path = self.temp_dir / f"frame_{int(timestamp)}.jpg"
                 cv2.imwrite(str(frame_path), frame)
-                
                 # Encode frame as base64 for Gemini
                 _, buffer = cv2.imencode('.jpg', frame)
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
-                
                 frames_data.append({
                     "timestamp": timestamp,
                     "frame_path": str(frame_path),
                     "frame_base64": frame_base64
                 })
-            
+                extracted_count += 1
+                extracted_timestamps.append(timestamp)
+                print(f"Extracted frame at {timestamp:.1f}s ({extracted_count}/{max_frames})")
             frame_count += 1
-        
         cap.release()
+        print(f"Extracted {len(frames_data)} frames from video (every {interval}s, max {max_frames})")
+        print(f"Extracted frame timestamps: {[f'{t:.1f}' for t in extracted_timestamps]}")
         return frames_data
     
     def generate_section_breakdown(self, transcript: List[Dict], video_metadata: Dict) -> List[Dict[str, Any]]:
-        """Generate section breakdown using OpenAI"""
-        if not transcript:
-            return []
+        """Generate section breakdown using OpenAI and visual analysis if no transcript"""
         
-        # Combine transcript into text chunks
+        # If we have transcript, use it
+        if transcript and len(transcript) > 0:
+            return self.generate_sections_from_transcript(transcript, video_metadata)
+        
+        # If no transcript, use visual analysis
+        print("No transcript available - generating sections from visual analysis")
+        return self.generate_sections_from_frames(video_metadata)
+    
+    def generate_sections_from_transcript(self, transcript: List[Dict], video_metadata: Dict) -> List[Dict[str, Any]]:
+        """Generate sections from transcript (original method)"""
         text_chunks = []
         current_chunk = ""
         chunk_start_time = 0
@@ -245,6 +307,53 @@ class VideoProcessor:
         
         return sections
     
+    def generate_sections_from_frames(self, video_metadata: Dict) -> List[Dict[str, Any]]:
+        """Generate sections using visual analysis when no transcript is available (denser frames, limited)"""
+        try:
+            # Extract more frames for analysis (every 15 seconds, max 40 frames)
+            frames = self.extract_frames(video_metadata["video_path"], interval=15, max_frames=40)
+            if not frames:
+                print("No frames extracted for visual section generation.")
+                return []
+            print(f"Generating sections from {len(frames)} frames...")
+            sections = []
+            duration = video_metadata.get("duration", 0)
+            for i, frame in enumerate(frames):
+                try:
+                    print(f"[Gemini] Analyzing frame {i+1}/{len(frames)} at {frame['timestamp']:.1f}s...")
+                    image_part = genai.types.BlobDict(
+                        mime_type="image/jpeg",
+                        data=base64.b64decode(frame["frame_base64"])
+                    )
+                    response = self.gemini_model.generate_content([
+                        f"Analyze this frame from a video titled '{video_metadata['title']}'. Provide a brief title (max 6 words) and description (max 40 words) of what's happening:",
+                        image_part
+                    ])
+                    print(f"[Gemini] Response for frame {i+1}: {response.text}")
+                    if response.text:
+                        lines = response.text.strip().split('\n')
+                        title = lines[0] if lines else f"Visual Section {i+1}"
+                        description = lines[1] if len(lines) > 1 else "Visual content analysis"
+                        start_time = frame["timestamp"]
+                        end_time = frames[i+1]["timestamp"] if i+1 < len(frames) else duration
+                        sections.append({
+                            "title": title.replace("Title:", "").replace("**", "").strip(),
+                            "summary": description.replace("Description:", "").replace("**", "").strip(),
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "transcript_text": f"Visual content at {start_time:.0f}s: {description}"
+                        })
+                        print(f"Generated visual section: {title} ({start_time:.1f}s - {end_time:.1f}s)")
+                except Exception as e:
+                    print(f"Error analyzing frame {i}: {str(e)}")
+            print(f"Total sections generated: {len(sections)}")
+            for sec in sections:
+                print(f"Section: {sec['title']} | {sec['start_time']:.1f}s - {sec['end_time']:.1f}s")
+            return sections
+        except Exception as e:
+            print(f"Error generating visual sections: {str(e)}")
+            return []
+    
     def create_embeddings(self, sections: List[Dict], frames_data: List[Dict]) -> Dict[str, Any]:
         """Create embeddings for text and visual content using scikit-learn"""
         # Text embeddings
@@ -308,6 +417,7 @@ class VideoProcessor:
         else:
             visual_embeddings = None
         
+        print(f"[Embeddings] Created {len(text_embeddings) if text_embeddings is not None else 0} text embeddings and {len(visual_embeddings) if visual_embeddings is not None else 0} visual embeddings.")
         return {
             "text_embeddings": text_embeddings,
             "text_metadata": text_metadata,
@@ -346,17 +456,47 @@ class VideoProcessor:
         
         # Sort by score (descending)
         results.sort(key=lambda x: x["score"], reverse=True)
+        print(f"[Search] Retrieved {len(results)} results for query '{query}'. Types: {[r['type'] for r in results]}")
         return results[:k]
     
     def chat_with_video(self, question: str, video_metadata: Dict, embeddings_data: Dict) -> Dict[str, Any]:
-        """Chat with video using context from search results"""
+        """Chat with video using context from search results and visual analysis"""
         # Search for relevant content
-        relevant_content = self.search_content(question, embeddings_data, k=3)
+        relevant_content = self.search_content(question, embeddings_data, k=5)
         
-        # Build context
+        # Build context from both text and visual content
         context_parts = []
         citations = []
         
+        # If we have very little content, analyze more frames
+        if len(relevant_content) < 2:
+            print("Limited content found, analyzing additional frames...")
+            additional_frames = self.extract_frames(video_metadata["video_path"], interval=120)  # Every 2 minutes
+            
+            for frame in additional_frames[:3]:  # Analyze first 3 frames
+                try:
+                    image_part = genai.types.BlobDict(
+                        mime_type="image/jpeg",
+                        data=base64.b64decode(frame["frame_base64"])
+                    )
+                    
+                    response = self.gemini_model.generate_content([
+                        f"Analyze this frame from '{video_metadata['title']}' and describe what you see in detail:",
+                        image_part
+                    ])
+                    
+                    if response.text:
+                        context_parts.append(f"Visual at {frame['timestamp']:.0f}s: {response.text}")
+                        citations.append({
+                            "timestamp": frame["timestamp"],
+                            "description": response.text[:100] + "...",
+                            "type": "visual"
+                        })
+                        
+                except Exception as e:
+                    print(f"Error analyzing additional frame: {str(e)}")
+        
+        # Add existing relevant content
         for content in relevant_content:
             if content["type"] == "text":
                 context_parts.append(f"Section: {content['title']}\nTime: {content['start_time']:.0f}s-{content['end_time']:.0f}s\nContent: {content['text'][:500]}...")
@@ -378,12 +518,19 @@ class VideoProcessor:
         
         # Generate response using OpenAI
         try:
+            system_message = f"""You are a helpful assistant that answers questions about a video titled '{video_metadata['title']}'. 
+            
+            The video is {video_metadata.get('duration', 0)//60} minutes long. Use the provided context to answer questions accurately. 
+            When referencing specific content, mention the timestamp. If the context is limited, acknowledge this but still provide helpful information based on what's available.
+            
+            Video description: {video_metadata.get('description', 'No description available')}"""
+            
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {
                         "role": "system",
-                        "content": f"You are a helpful assistant that answers questions about a video titled '{video_metadata['title']}'. Use the provided context to answer questions accurately. When referencing specific content, mention the timestamp."
+                        "content": system_message
                     },
                     {
                         "role": "user",
@@ -395,6 +542,7 @@ class VideoProcessor:
             
             answer = response.choices[0].message.content
             
+            print(f"[Chat] Context built from {len(relevant_content)} items. Types: {[c['type'] for c in relevant_content]}")
             return {
                 "answer": answer,
                 "citations": citations,
@@ -406,3 +554,37 @@ class VideoProcessor:
                 "citations": citations,
                 "relevant_content": relevant_content
             }
+    
+    def extract_audio(self, video_path: str, audio_path: str) -> bool:
+        """Extract audio from video using ffmpeg"""
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", str(video_path),
+                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", str(audio_path)
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"Audio extracted to {audio_path}")
+            return True
+        except Exception as e:
+            print(f"Audio extraction failed: {str(e)}")
+            return False
+    
+    def whisper_transcribe(self, audio_path: str) -> list:
+        """Transcribe audio using OpenAI Whisper API"""
+        try:
+            client = self.openai_client
+            with open(audio_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="verbose_json"
+                )
+            print(f"Whisper transcript received with {len(transcript['segments'])} segments")
+            # Convert Whisper segments to youtube-transcript-api format
+            return [
+                {"text": seg["text"], "start": seg["start"], "duration": seg["end"] - seg["start"]}
+                for seg in transcript["segments"]
+            ]
+        except Exception as e:
+            print(f"Whisper transcription failed: {str(e)}")
+            return []

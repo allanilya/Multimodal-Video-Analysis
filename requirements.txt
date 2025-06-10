@@ -1,4 +1,3 @@
-
 torch==2.1.0
 torchvision==0.16.0
 torchaudio==2.1.0
@@ -38,3 +37,7 @@ pydantic==2.5.0
 
 # Note: FAISS removed as it can be problematic on M1
 # Using scikit-learn for similarity search instead
+
+openai-whisper==20231117
+ffmpeg-python==0.2.0
+# Note: You must have ffmpeg installed on your system (brew install ffmpeg or apt install ffmpeg)
