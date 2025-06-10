@@ -75,36 +75,43 @@ async def process_video(request: ProcessVideoRequest):
     """Process a YouTube video."""
     try:
         logger.info(f"Processing video: {request.url}")
-        
+
         # Extract video ID first to validate URL
         video_id = video_processor.extract_video_id(request.url)
-        
+
         # Check if already processed
         if video_id in video_data:
-            return {"video_id": video_id, "message": "Video already processed"}
-        
+            return {
+                "status": "success",
+                "message": "Video already processed",
+                "video_id": video_id,
+                "video_data": {"url": request.url},
+                "sections": video_data[video_id]["sections"],
+            }
+
         # Process the video
         result = video_processor.process_video(request.url)
-        
+
         # Store results (excluding non-serializable objects)
         video_data[video_id] = {
             "video_id": result["video_id"],
             "transcript": result["transcript"],
             "frame_descriptions": result["frame_descriptions"],
             "sections": result["sections"],
-            "metadata": result["metadata"]
+            "metadata": result["metadata"],
         }
-        
+
         # Store embeddings and index separately (not serializable)
         if result["embeddings"] is not None:
             video_data[video_id]["_embeddings"] = result["embeddings"]
             video_data[video_id]["_search_index"] = result["search_index"]
-        
+
         return {
+            "status": "success",
+            "message": "Video processed successfully",
             "video_id": video_id,
+            "video_data": {"url": request.url},
             "sections": result["sections"],
-            "transcript_available": len(result["transcript"]) > 0,
-            "frames_analyzed": len(result["frame_descriptions"])
         }
         
     except ValueError as e:
@@ -136,7 +143,7 @@ async def get_video(video_id: str):
     
     # Return serializable data only
     data = {k: v for k, v in video_data[video_id].items() if not k.startswith("_")}
-    return data
+    return {"status": "success", "video": data}
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
@@ -170,8 +177,11 @@ async def chat(request: ChatRequest):
         )
         
         return {
-            "response": response.choices[0].message.content,
-            "citations": []  # You can enhance this to extract timestamps from the response
+            "status": "success",
+            "response": {
+                "answer": response.choices[0].message.content,
+                "citations": []  # You can enhance this to extract timestamps from the response
+            }
         }
         
     except Exception as e:
@@ -209,7 +219,10 @@ async def search(request: SearchRequest):
                     "content": metadata["content"]
                 })
         
-        return {"results": results}
+        return {
+            "status": "success",
+            "results": results,
+        }
         
     except Exception as e:
         logger.error(f"Search error: {e}")
