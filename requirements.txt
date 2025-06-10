@@ -1,28 +1,34 @@
-# Minimal requirements for improved video analysis
-# Focused on Google's video understanding capabilities
+# Updated requirements.txt with compatible versions
 
-# Web Framework
-fastapi==0.104.1
-uvicorn==0.24.0
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
 python-multipart==0.0.6
-jinja2==3.1.2
+jinja2==3.1.3
 aiofiles==23.2.1
 
-# AI APIs - Core requirements only
-openai==1.6.1
-google-generativeai==0.3.2
+# AI/ML APIs
+openai==1.10.0
+google-generativeai==0.8.3  # Updated version that uses new API
+google-cloud-aiplatform==1.38.0
+
+# Video processing
+yt-dlp==2024.1.0  # More reliable than pytube
+pytube==15.0.0  # Keep as fallback
+youtube-transcript-api==0.6.2
+moviepy==1.0.3
+opencv-python==4.9.0.80
+
+# ML/Vector search
+sentence-transformers==2.3.1
+faiss-cpu==1.7.4
+numpy==1.24.3
+torch==2.1.2
+
+# Image processing
+Pillow==10.2.0
 
 # Utilities
 python-dotenv==1.0.0
 requests==2.31.0
-pydantic==2.5.0
-
-# Optional: For fallback video info (if needed)
-pytubefix==6.10.2
-
-# Note: Removed heavy dependencies:
-# - torch/transformers (not needed with Gemini)
-# - sentence-transformers (using OpenAI embeddings)
-# - opencv-python (not needed for direct video analysis)
-# - moviepy (not needed with Gemini video API)
-# - scikit-learn (simplified approach)
+pydantic==2.5.3

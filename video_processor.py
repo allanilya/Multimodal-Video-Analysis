@@ -1,329 +1,273 @@
+# Updated video_processor.py with fixes for the Gemini API changes
+
 import os
 import json
 import tempfile
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-import google.generativeai as genai
+from typing import List, Dict, Any
+import cv2
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import faiss
 from openai import OpenAI
+import google.generativeai as genai
+from pytube import YouTube
+from youtube_transcript_api import YouTubeTranscriptApi
+from moviepy.editor import VideoFileClip
+import logging
 from dotenv import load_dotenv
-import requests
-import time
 
+# Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     def __init__(self):
-        # Check API keys
-        openai_key = os.getenv("OPENAI_API_KEY")
-        google_key = os.getenv("GOOGLE_API_KEY")
+        """Initialize the video processor with API clients and models."""
+        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+        self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        if not openai_key:
-            raise Exception("OPENAI_API_KEY not found in environment variables")
-        if not google_key:
-            raise Exception("GOOGLE_API_KEY not found in environment variables")
-            
-        self.openai_client = OpenAI(api_key=openai_key)
-        genai.configure(api_key=google_key)
+    def extract_video_id(self, url: str) -> str:
+        """Extract video ID from YouTube URL."""
+        if "youtu.be" in url:
+            return url.split("/")[-1].split("?")[0]
+        elif "youtube.com" in url:
+            if "v=" in url:
+                return url.split("v=")[1].split("&")[0]
+            elif "embed/" in url:
+                return url.split("embed/")[1].split("?")[0]
+        raise ValueError("Invalid YouTube URL")
         
-        # Use Gemini 1.5 Pro for video analysis
-        self.gemini_model = genai.GenerativeModel('gemini-1.5-pro')
-        
-        self.upload_dir = Path("./uploads")
-        self.upload_dir.mkdir(exist_ok=True)
-        
-    def extract_video_id(self, youtube_url: str) -> str:
-        """Extract video ID from YouTube URL"""
-        if "youtube.com/watch?v=" in youtube_url:
-            return youtube_url.split("watch?v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            return youtube_url.split("youtu.be/")[1].split("?")[0]
-        else:
-            raise ValueError("Invalid YouTube URL format")
-    
-    def upload_video_to_gemini(self, youtube_url: str) -> Dict[str, Any]:
-        """Upload video directly to Gemini for analysis"""
+    def download_video(self, url: str, output_path: str) -> str:
+        """Download video from YouTube using yt-dlp."""
         try:
-            video_id = self.extract_video_id(youtube_url)
-            print(f"Processing video with Gemini: {video_id}")
+            # Use yt-dlp instead of pytube for better reliability
+            import yt_dlp
             
-            # Upload video file to Gemini
-            print("Uploading video to Google AI...")
-            video_file = genai.upload_file(
-                path=youtube_url,  # Gemini can handle YouTube URLs directly
-                display_name=f"video_{video_id}"
-            )
+            video_id = self.extract_video_id(url)
+            output_filepath = os.path.join(output_path, f"{video_id}.mp4")
             
-            print(f"Upload complete: {video_file.uri}")
+            # Check if already downloaded
+            if os.path.exists(output_filepath):
+                logger.info(f"Video already exists: {output_filepath}")
+                return output_filepath
             
-            # Wait for processing
-            print("Waiting for video processing...")
-            while video_file.state.name == "PROCESSING":
-                print(".", end="", flush=True)
-                time.sleep(2)
-                video_file = genai.get_file(video_file.name)
-            
-            if video_file.state.name == "FAILED":
-                raise Exception("Video processing failed")
-            
-            print("\nVideo processing complete!")
-            
-            # Get basic video info
-            video_info = self.get_video_info(youtube_url)
-            
-            return {
-                "video_id": video_id,
-                "gemini_file": video_file,
-                "url": youtube_url,
-                **video_info
+            ydl_opts = {
+                'outtmpl': output_filepath,
+                'format': 'best[ext=mp4]/best',
+                'quiet': True,
+                'no_warnings': True,
             }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                logger.info(f"Downloading video: {url}")
+                ydl.download([url])
+                
+            logger.info(f"Video downloaded: {output_filepath}")
+            return output_filepath
             
         except Exception as e:
-            print(f"Error uploading to Gemini: {str(e)}")
-            # Fallback to YouTube URL analysis
-            return self.analyze_youtube_url(youtube_url)
-    
-    def get_video_info(self, youtube_url: str) -> Dict[str, Any]:
-        """Get basic video information"""
+            logger.error(f"Error downloading video: {e}")
+            # Fallback to pytube if yt-dlp fails
+            try:
+                yt = YouTube(url)
+                stream = yt.streams.get_highest_resolution()
+                video_path = stream.download(output_path=output_path)
+                logger.info(f"Video downloaded with pytube: {video_path}")
+                return video_path
+            except Exception as pytube_error:
+                logger.error(f"Both yt-dlp and pytube failed: {pytube_error}")
+                raise
+
+    def extract_transcript(self, video_url: str) -> List[Dict[str, Any]]:
+        """Extract transcript from YouTube video."""
         try:
-            # Try to get basic info without downloading
-            from pytubefix import YouTube
-            yt = YouTube(youtube_url)
-            return {
-                "title": yt.title,
-                "description": yt.description or "No description available",
-                "duration": yt.length
-            }
-        except:
-            return {
-                "title": "Video Analysis",
-                "description": "Description unavailable",
-                "duration": 0
-            }
-    
-    def analyze_youtube_url(self, youtube_url: str) -> Dict[str, Any]:
-        """Fallback: Analyze YouTube URL directly with Gemini"""
-        try:
-            video_id = self.extract_video_id(youtube_url)
-            print(f"Analyzing YouTube URL directly: {video_id}")
-            
-            # Create a video part for Gemini
-            video_part = genai.types.FileDataPart(
-                file_data=genai.types.FileData(
-                    file_uri=youtube_url,
-                    mime_type="video/mp4"
-                )
-            )
-            
-            video_info = self.get_video_info(youtube_url)
-            
-            return {
-                "video_id": video_id,
-                "video_part": video_part,
-                "url": youtube_url,
-                **video_info
-            }
-            
+            video_id = self.extract_video_id(video_url)
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            logger.info(f"Transcript extracted: {len(transcript)} segments")
+            return transcript
         except Exception as e:
-            raise Exception(f"Could not analyze video: {str(e)}")
-    
-    def generate_comprehensive_analysis(self, video_data: Dict) -> Dict[str, Any]:
-        """Generate comprehensive video analysis using Gemini"""
+            logger.warning(f"Could not extract transcript: {e}")
+            return []
+
+    def extract_frames(self, video_path: str, interval: int = 5) -> List[Dict[str, Any]]:
+        """Extract frames from video at specified intervals."""
+        frames_data = []
+        video = cv2.VideoCapture(video_path)
+        fps = video.get(cv2.CAP_PROP_FPS)
+        frame_count = 0
+        
+        while True:
+            ret, frame = video.read()
+            if not ret:
+                break
+                
+            timestamp = frame_count / fps
+            if int(timestamp) % interval == 0 and timestamp > 0:
+                # Save frame temporarily
+                temp_path = f"temp/frame_{int(timestamp)}.jpg"
+                cv2.imwrite(temp_path, frame)
+                frames_data.append({
+                    "timestamp": timestamp,
+                    "path": temp_path
+                })
+                
+            frame_count += 1
+            
+        video.release()
+        logger.info(f"Extracted {len(frames_data)} frames")
+        return frames_data
+
+    def analyze_frame_with_gemini(self, image_path: str) -> str:
+        """Analyze a single frame using Gemini Vision API."""
         try:
-            print("Generating comprehensive video analysis...")
+            # Upload the image file to Gemini
+            uploaded_file = genai.upload_file(image_path)
             
-            # Prepare video for analysis
-            if "gemini_file" in video_data:
-                video_input = video_data["gemini_file"]
-            else:
-                video_input = video_data["video_part"]
-            
-            # Generate comprehensive analysis
-            analysis_prompt = f"""
-            Analyze this video titled "{video_data.get('title', 'Unknown')}" comprehensively:
-            
-            1. TRANSCRIPT: Provide a detailed transcript of all spoken content with timestamps
-            2. SECTIONS: Break the video into 5-8 logical sections with start times and descriptions
-            3. VISUAL CONTENT: Describe key visual elements, scenes, and activities
-            4. SUMMARY: Provide a comprehensive summary of the video content
-            
-            Format your response as JSON with these keys:
-            - transcript: [{{time: "MM:SS", text: "spoken content"}}]
-            - sections: [{{start_time: seconds, title: "section title", description: "description"}}]
-            - visual_content: [{{timestamp: seconds, description: "visual description"}}]
-            - summary: "comprehensive summary"
-            """
-            
+            # Generate content with the uploaded file
             response = self.gemini_model.generate_content([
-                analysis_prompt,
-                video_input
+                "Describe what you see in this image in detail. Focus on objects, people, actions, and the overall scene.",
+                uploaded_file
             ])
             
-            if not response.text:
-                raise Exception("No response from Gemini video analysis")
+            # Clean up the uploaded file
+            genai.delete_file(uploaded_file.name)
             
-            print("Analysis complete!")
-            
-            # Parse response
-            try:
-                analysis = json.loads(response.text)
-            except:
-                # If JSON parsing fails, create structured response
-                analysis = self.parse_text_response(response.text)
-            
-            return analysis
-            
+            return response.text
         except Exception as e:
-            print(f"Error in comprehensive analysis: {str(e)}")
-            return self.fallback_analysis(video_data)
-    
-    def parse_text_response(self, text: str) -> Dict[str, Any]:
-        """Parse text response into structured format"""
-        lines = text.split('\n')
+            logger.error(f"Error analyzing frame: {e}")
+            return "Could not analyze frame"
+
+    def generate_section_breakdown(self, transcript: List[Dict], frame_descriptions: List[Dict]) -> List[Dict]:
+        """Generate video sections using GPT-4."""
+        # Prepare context
+        transcript_text = "\n".join([f"{t['start']}: {t['text']}" for t in transcript[:50]])  # Limit for context
         
-        sections = []
-        transcript = []
-        visual_content = []
-        summary = text[:500] + "..." if len(text) > 500 else text
+        prompt = f"""
+        Analyze this video content and create logical sections with timestamps.
         
-        current_section = None
+        Transcript (first 50 segments):
+        {transcript_text}
         
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-                
-            # Look for section markers
-            if any(word in line.lower() for word in ["section", "part", "minute", ":"]):
-                if current_section:
-                    sections.append(current_section)
-                
-                current_section = {
-                    "start_time": len(sections) * 60,  # Estimate
-                    "title": line[:50],
-                    "description": line
-                }
-        
-        if current_section:
-            sections.append(current_section)
-        
-        return {
-            "transcript": transcript,
-            "sections": sections,
-            "visual_content": visual_content,
-            "summary": summary
-        }
-    
-    def fallback_analysis(self, video_data: Dict) -> Dict[str, Any]:
-        """Fallback analysis when comprehensive fails"""
-        return {
-            "transcript": [],
-            "sections": [{
+        Create 5-8 main sections that represent the video's structure.
+        Return as JSON array with format:
+        [
+            {{
+                "title": "Section Title",
                 "start_time": 0,
-                "title": "Video Content",
-                "description": f"Analysis of {video_data.get('title', 'video content')}"
-            }],
-            "visual_content": [],
-            "summary": f"Video titled: {video_data.get('title', 'Unknown')}"
-        }
-    
-    def chat_with_video(self, question: str, video_data: Dict, analysis: Dict) -> Dict[str, Any]:
-        """Chat about video using comprehensive analysis"""
+                "end_time": 120,
+                "summary": "Brief description of what happens in this section"
+            }}
+        ]
+        """
+        
         try:
-            # Build context from analysis
-            context_parts = []
-            
-            # Add transcript
-            if analysis.get("transcript"):
-                transcript_text = "\n".join([f"{t['time']}: {t['text']}" for t in analysis["transcript"][:10]])
-                context_parts.append(f"TRANSCRIPT:\n{transcript_text}")
-            
-            # Add sections
-            if analysis.get("sections"):
-                sections_text = "\n".join([f"{s['start_time']}s: {s['title']} - {s['description']}" for s in analysis["sections"]])
-                context_parts.append(f"SECTIONS:\n{sections_text}")
-            
-            # Add visual content
-            if analysis.get("visual_content"):
-                visual_text = "\n".join([f"{v['timestamp']}s: {v['description']}" for v in analysis["visual_content"][:5]])
-                context_parts.append(f"VISUAL CONTENT:\n{visual_text}")
-            
-            # Add summary
-            if analysis.get("summary"):
-                context_parts.append(f"SUMMARY:\n{analysis['summary']}")
-            
-            context = "\n\n".join(context_parts)
-            
-            # Generate response
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""You are an AI assistant that can answer questions about a video titled "{video_data.get('title', 'Unknown')}".
-                        
-                        Use the provided video analysis to answer questions accurately. Always reference specific timestamps when relevant.
-                        If you mention content from the video, include the timestamp (e.g., "At 2:30...").
-                        """
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Video Analysis:\n{context}\n\nQuestion: {question}"
-                    }
-                ],
-                temperature=0.7
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
             )
             
-            return {
-                "answer": response.choices[0].message.content,
-                "context_used": len(context_parts),
-                "analysis_available": bool(analysis.get("transcript") or analysis.get("sections"))
-            }
-            
+            sections = json.loads(response.choices[0].message.content)
+            return sections.get("sections", [])
         except Exception as e:
-            return {
-                "answer": f"I encountered an error: {str(e)}. Please try rephrasing your question.",
-                "context_used": 0,
-                "analysis_available": False
-            }
-    
-    def search_content(self, query: str, analysis: Dict) -> List[Dict[str, Any]]:
-        """Search video content using analysis"""
-        results = []
+            logger.error(f"Error generating sections: {e}")
+            return []
+
+    def create_embeddings(self, texts: List[str]) -> np.ndarray:
+        """Create embeddings for text using sentence transformers."""
+        embeddings = self.sentence_model.encode(texts)
+        return embeddings
+
+    def build_search_index(self, embeddings: np.ndarray) -> faiss.IndexFlatL2:
+        """Build FAISS index for similarity search."""
+        dimension = embeddings.shape[1]
+        index = faiss.IndexFlatL2(dimension)
+        index.add(embeddings)
+        return index
+
+    def process_video(self, video_url: str) -> Dict[str, Any]:
+        """Main processing pipeline for video analysis."""
+        video_id = self.extract_video_id(video_url)
         
-        # Search transcript
-        if analysis.get("transcript"):
-            for item in analysis["transcript"]:
-                if query.lower() in item.get("text", "").lower():
-                    results.append({
-                        "type": "transcript",
-                        "time": item["time"],
-                        "content": item["text"],
-                        "score": 0.9
-                    })
+        # Create directories
+        os.makedirs("uploads", exist_ok=True)
+        os.makedirs("temp", exist_ok=True)
         
-        # Search sections
-        if analysis.get("sections"):
-            for section in analysis["sections"]:
-                if query.lower() in section.get("description", "").lower():
-                    results.append({
-                        "type": "section",
-                        "start_time": section["start_time"],
-                        "title": section["title"],
-                        "content": section["description"],
-                        "score": 0.8
-                    })
+        # Download video
+        video_path = self.download_video(video_url, "uploads")
         
-        # Search visual content
-        if analysis.get("visual_content"):
-            for visual in analysis["visual_content"]:
-                if query.lower() in visual.get("description", "").lower():
-                    results.append({
-                        "type": "visual",
-                        "timestamp": visual["timestamp"],
-                        "content": visual["description"],
-                        "score": 0.7
-                    })
+        # Extract transcript
+        transcript = self.extract_transcript(video_url)
         
-        # Sort by score
-        results.sort(key=lambda x: x["score"], reverse=True)
-        return results[:10]
+        # Extract frames
+        frames_data = self.extract_frames(video_path)
+        
+        # Analyze frames with Gemini
+        frame_descriptions = []
+        for frame in frames_data[:10]:  # Limit to first 10 frames for demo
+            description = self.analyze_frame_with_gemini(frame["path"])
+            frame_descriptions.append({
+                "timestamp": frame["timestamp"],
+                "description": description
+            })
+            
+        # Generate sections
+        sections = self.generate_section_breakdown(transcript, frame_descriptions)
+        
+        # Create embeddings for search
+        all_texts = []
+        metadata = []
+        
+        # Add transcript segments
+        for segment in transcript:
+            all_texts.append(segment["text"])
+            metadata.append({
+                "type": "transcript",
+                "timestamp": segment["start"],
+                "content": segment["text"]
+            })
+            
+        # Add frame descriptions
+        for frame_desc in frame_descriptions:
+            all_texts.append(frame_desc["description"])
+            metadata.append({
+                "type": "visual",
+                "timestamp": frame_desc["timestamp"],
+                "content": frame_desc["description"]
+            })
+            
+        # Build search index
+        if all_texts:
+            embeddings = self.create_embeddings(all_texts)
+            search_index = self.build_search_index(embeddings)
+        else:
+            search_index = None
+            embeddings = None
+            
+        # Clean up temporary frame files
+        for frame in frames_data:
+            try:
+                os.remove(frame["path"])
+            except:
+                pass
+                
+        return {
+            "video_id": video_id,
+            "video_path": video_path,
+            "transcript": transcript,
+            "frame_descriptions": frame_descriptions,
+            "sections": sections,
+            "search_index": search_index,
+            "embeddings": embeddings,
+            "metadata": metadata
+        }
+
+# Example usage:
+if __name__ == "__main__":
+    processor = VideoProcessor()
+    # result = processor.process_video("https://www.youtube.com/watch?v=VIDEO_ID")
