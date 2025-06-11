@@ -1,16 +1,71 @@
-.env
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
+.venv/
 env/
 ENV/
-.venv/
+*.egg-info/
+dist/
+build/
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment (single .env in root)
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads and temp files
+uploads/
+temp/
 downloads/
 logs/
-temp/
-uploads
-uploads/
-.uploads/
-/uploads/
-/uploads
-**/__pycache__/
-pycache/
-__pycache__
+*.mp4
+*.webm
+*.npz
+
+# Node
+node_modules/
+.next/
+out/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+.pytest_cache/
+coverage/
+*.cover
+.coverage
+
+# Redis
+dump.rdb
+
+# Legacy files (old structure - to be removed)
+main.py
+video_processor.py
+test_apis.py
+static/
+templates/
+api/
+services/
+models/schemas.py
+multi_modal_video_RAG.ipynb
+requirements.txt
