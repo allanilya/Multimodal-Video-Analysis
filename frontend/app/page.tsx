@@ -24,18 +24,32 @@ export default function Home() {
   useEffect(() => {
     // Initialize socket connection
     const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:5001';
+    console.log('🔌 Connecting to WebSocket:', WS_URL);
     const newSocket = io(WS_URL);
 
+    newSocket.on('connect', () => {
+      console.log('✅ WebSocket connected');
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('❌ WebSocket disconnected');
+    });
+
     newSocket.on('processing_status', (status: ProcessingStatus) => {
+      console.log('📡 Received WebSocket event:', status);
       setProcessingMessage(status.message);
 
       if (status.status === 'completed' && status.data) {
+        console.log('✅ Processing completed, setting video data:', status.data);
         setVideoData(status.data);
         setLoading(false);
         setError('');
       } else if (status.status === 'error') {
+        console.error('❌ Processing error:', status.message);
         setError(status.message);
         setLoading(false);
+      } else {
+        console.log('⏳ Processing status update:', status.status);
       }
     });
 
@@ -56,6 +70,7 @@ export default function Home() {
       return;
     }
 
+    console.log('🎬 Processing video:', videoId);
     setLoading(true);
     setError('');
     setVideoData(null);
@@ -63,13 +78,18 @@ export default function Home() {
 
     try {
       const response = await videoApi.processVideo(url);
+      console.log('📥 API Response:', response);
 
       if (response.status === 'completed' && response.data) {
+        console.log('✅ Video already cached, displaying immediately');
         setVideoData(response.data);
         setLoading(false);
+      } else {
+        console.log('⏳ Video processing in background, waiting for WebSocket updates...');
       }
       // If status is 'processing', we'll wait for socket updates
     } catch (err: any) {
+      console.error('❌ API Error:', err);
       setError(err.response?.data?.error || 'Failed to process video');
       setLoading(false);
     }
@@ -82,7 +102,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-white">
       {/* Header */}
       <header className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -114,13 +134,13 @@ export default function Home() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-900"
                   disabled={loading}
                 />
                 <button
                   type="submit"
                   disabled={loading || !url.trim()}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                  className="px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -142,7 +162,7 @@ export default function Home() {
             )}
 
             {loading && processingMessage && (
-              <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
                 <Loader2 className="animate-spin" size={20} />
                 <span>{processingMessage}</span>
               </div>

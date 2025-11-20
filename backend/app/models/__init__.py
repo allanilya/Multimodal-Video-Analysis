@@ -36,6 +36,8 @@ class ProcessingResult:
     transcript: List[Dict]
     processing_time: float
     thumbnail_url: Optional[str] = None
+    description: Optional[str] = None
+    author: Optional[str] = None
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""
@@ -47,6 +49,8 @@ class ProcessingResult:
             'transcript': self.transcript,
             'processing_time': self.processing_time,
             'thumbnail_url': self.thumbnail_url,
+            'description': self.description,
+            'author': self.author,
             'has_transcript': len(self.transcript) > 0
         }
 

@@ -34,7 +34,7 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
   return (
     <div className="bg-white rounded-lg shadow-lg p-4">
       <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
-        <Search className="text-blue-600" size={24} />
+        <Search className="text-red-600" size={24} />
         Search Video Content
       </h2>
 
@@ -45,12 +45,12 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search for visual or text content..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-900"
           />
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
             Search
@@ -63,7 +63,7 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
             onClick={() => setSearchType('both')}
             className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
               searchType === 'both'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-red-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -74,7 +74,7 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
             onClick={() => setSearchType('visual')}
             className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
               searchType === 'visual'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-red-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -86,7 +86,7 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
             onClick={() => setSearchType('text')}
             className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
               searchType === 'text'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-red-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -113,7 +113,7 @@ export default function SearchInterface({ videoId, onResultClick }: SearchInterf
                     ) : (
                       <FileText size={14} className="text-green-600" />
                     )}
-                    <span className="text-sm font-medium text-blue-600">
+                    <span className="text-sm font-medium text-red-600">
                       {result.formatted_time}
                     </span>
                     <span

@@ -66,7 +66,7 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <MessageSquare className="text-blue-600" size={24} />
+          <MessageSquare className="text-red-600" size={24} />
           Ask About This Video
         </h2>
       </div>
@@ -88,7 +88,7 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
             <div
               className={`max-w-[80%] rounded-lg p-3 ${
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-red-600 text-white'
                   : 'bg-gray-100 text-gray-900'
               }`}
             >
@@ -102,7 +102,7 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
                       <button
                         key={i}
                         onClick={() => onCitationClick(citation.seconds)}
-                        className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                        className="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
                       >
                         {citation.timestamp}
                         {citation.section && ` - ${citation.section}`}
@@ -118,7 +118,7 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 rounded-lg p-3">
-              <Loader2 className="animate-spin text-blue-600" size={20} />
+              <Loader2 className="animate-spin text-red-600" size={20} />
             </div>
           </div>
         )}
@@ -134,13 +134,13 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a question about the video..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-900"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             <Send size={20} />
           </button>
