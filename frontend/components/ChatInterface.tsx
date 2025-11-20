@@ -62,11 +62,11 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-lg">
+    <div className="flex flex-col h-full bg-[#262626] rounded-lg shadow-lg border border-red-600/20">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <MessageSquare className="text-red-600" size={24} />
+      <div className="p-4 border-b border-gray-700">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <MessageSquare className="text-red-500" size={24} />
           Ask About This Video
         </h2>
       </div>
@@ -89,13 +89,13 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
               className={`max-w-[80%] rounded-lg p-3 ${
                 message.role === 'user'
                   ? 'bg-red-600 text-white'
-                  : 'bg-gray-100 text-gray-900'
+                  : 'bg-[#1a1a1a] text-gray-200 border border-gray-700'
               }`}
             >
               <p className="whitespace-pre-wrap">{message.content}</p>
 
               {message.citations && message.citations.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-300">
+                <div className="mt-2 pt-2 border-t border-gray-600">
                   <p className="text-xs font-semibold mb-1">Citations:</p>
                   <div className="flex flex-wrap gap-1">
                     {message.citations.map((citation, i) => (
@@ -117,8 +117,8 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg p-3">
-              <Loader2 className="animate-spin text-red-600" size={20} />
+            <div className="bg-[#1a1a1a] border border-gray-700 rounded-lg p-3">
+              <Loader2 className="animate-spin text-red-500" size={20} />
             </div>
           </div>
         )}
@@ -127,20 +127,20 @@ export default function ChatInterface({ videoId, onCitationClick }: ChatInterfac
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200">
+      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a question about the video..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-900"
+            className="flex-1 px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-gray-500"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
           >
             <Send size={20} />
           </button>

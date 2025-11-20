@@ -102,17 +102,17 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-white">
+    <div className="min-h-screen bg-[#1a1a1a]">
       {/* Header */}
-      <header className="bg-white shadow-md">
+      <header className="bg-[#0f0f0f] shadow-lg border-b border-red-600/30">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center gap-3">
-            <Youtube className="text-red-600" size={36} />
+            <Youtube className="text-red-500" size={36} />
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-3xl font-bold text-white">
                 Multimodal Video Analysis
               </h1>
-              <p className="text-gray-600">
+              <p className="text-gray-400">
                 AI-powered video analysis with chat and visual search
               </p>
             </div>
@@ -122,10 +122,10 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* URL Input */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <div className="bg-[#262626] rounded-lg shadow-lg p-6 mb-8 border border-red-600/20">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 YouTube Video URL
               </label>
               <div className="flex gap-2">
@@ -134,13 +134,13 @@ export default function Home() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-900"
+                  className="flex-1 px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-gray-500"
                   disabled={loading}
                 />
                 <button
                   type="submit"
                   disabled={loading || !url.trim()}
-                  className="px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                  className="px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -155,14 +155,14 @@ export default function Home() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-red-400 bg-red-950/30 p-3 rounded-lg border border-red-900/50">
                 <XCircle size={20} />
                 <span>{error}</span>
               </div>
             )}
 
             {loading && processingMessage && (
-              <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-red-400 bg-red-950/30 p-3 rounded-lg border border-red-900/50">
                 <Loader2 className="animate-spin" size={20} />
                 <span>{processingMessage}</span>
               </div>
@@ -174,7 +174,7 @@ export default function Home() {
         {videoData && (
           <div className="space-y-6">
             {/* Success Message */}
-            <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">
+            <div className="flex items-center gap-2 text-green-400 bg-green-950/30 p-3 rounded-lg border border-green-900/50">
               <CheckCircle size={20} />
               <span>
                 Video processed in {videoData.processing_time.toFixed(2)}s
@@ -182,11 +182,11 @@ export default function Home() {
             </div>
 
             {/* Video Title */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <div className="bg-[#262626] rounded-lg shadow-lg p-6 border border-red-600/20">
+              <h2 className="text-2xl font-bold text-white mb-2">
                 {videoData.title}
               </h2>
-              <div className="flex gap-4 text-sm text-gray-600">
+              <div className="flex gap-4 text-sm text-gray-400">
                 <span>Duration: {Math.floor(videoData.duration / 60)}m</span>
                 <span>Sections: {videoData.sections.length}</span>
                 {videoData.has_transcript && <span>Transcript available</span>}
@@ -231,11 +231,11 @@ export default function Home() {
         {/* Empty State */}
         {!videoData && !loading && (
           <div className="text-center py-16">
-            <Youtube className="mx-auto text-gray-300 mb-4" size={64} />
-            <h2 className="text-2xl font-bold text-gray-700 mb-2">
+            <Youtube className="mx-auto text-gray-700 mb-4" size={64} />
+            <h2 className="text-2xl font-bold text-gray-300 mb-2">
               Start by entering a YouTube URL
             </h2>
-            <p className="text-gray-600">
+            <p className="text-gray-500">
               Analyze videos with AI-powered section breakdown, chat, and visual search
             </p>
           </div>
