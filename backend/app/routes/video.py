@@ -105,6 +105,126 @@ def process_video_background(url: str, video_id: str):
             'message': str(e)
         })
 
+@bp.route('/<video_id>/preload', methods=['POST'])
+def preload_embeddings(video_id: str):
+    """Preemptively load video embeddings in background (called when page loads)
+
+    This starts background frame extraction and embedding generation as soon as
+    the user visits the video page, before they perform any visual search.
+    """
+    try:
+        from pathlib import Path
+        from config import Config
+
+        # Check if embeddings already exist
+        embeddings_path = Config.TEMP_FOLDER / f"{video_id}_embeddings.npz"
+
+        if embeddings_path.exists():
+            logger.info(f"Embeddings already exist for {video_id}, skipping preload")
+            return jsonify({
+                'video_id': video_id,
+                'status': 'already_loaded',
+                'message': 'Embeddings already available'
+            }), 200
+
+        # Check if video exists in cache
+        cache_key = cache.get_cache_key(video_id)
+        cached_data = cache.get(cache_key)
+
+        if not cached_data:
+            return jsonify({
+                'error': 'Video not found. Process video first.'
+            }), 404
+
+        # Start background embedding generation
+        socketio.start_background_task(
+            preload_embeddings_background,
+            video_id,
+            cached_data.get('url', f'https://www.youtube.com/watch?v={video_id}')
+        )
+
+        return jsonify({
+            'video_id': video_id,
+            'status': 'loading',
+            'message': 'Background embedding generation started'
+        }), 202
+
+    except Exception as e:
+        logger.error(f"Preload error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+def preload_embeddings_background(video_id: str, url: str):
+    """Background task to generate embeddings proactively"""
+    try:
+        from config import Config
+        from pathlib import Path
+
+        logger.info(f"🚀 Preloading embeddings for {video_id}")
+
+        socketio.emit('embedding_status', {
+            'video_id': video_id,
+            'status': 'started',
+            'message': 'Downloading video and extracting frames...'
+        })
+
+        # Create event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Download video and generate embeddings
+        video_path = Config.UPLOAD_FOLDER / f"{video_id}.mp4"
+
+        # Download if not exists
+        if not video_path.exists():
+            loop.run_until_complete(
+                asyncio.to_thread(
+                    processor.youtube_service.download_video,
+                    url,
+                    video_path
+                )
+            )
+
+        # Extract frames and generate embeddings
+        frames, frame_timestamps = loop.run_until_complete(
+            processor._extract_frames(video_path)
+        )
+
+        socketio.emit('embedding_status', {
+            'video_id': video_id,
+            'status': 'processing',
+            'message': f'Generating embeddings for {len(frames)} frames...'
+        })
+
+        frame_embeddings = loop.run_until_complete(
+            processor._generate_frame_embeddings(frames)
+        )
+
+        # Store embeddings
+        loop.run_until_complete(
+            processor._store_embeddings(
+                video_id,
+                frame_embeddings,
+                frame_timestamps,
+                None
+            )
+        )
+
+        socketio.emit('embedding_status', {
+            'video_id': video_id,
+            'status': 'completed',
+            'message': f'Embeddings ready ({len(frames)} frames)'
+        })
+
+        logger.info(f"✅ Preload complete for {video_id}")
+
+    except Exception as e:
+        logger.error(f"Preload background error: {e}", exc_info=True)
+        socketio.emit('embedding_status', {
+            'video_id': video_id,
+            'status': 'error',
+            'message': str(e)
+        })
+
 @bp.route('/<video_id>', methods=['GET'])
 def get_video_info(video_id: str):
     """Get processed video information"""
