@@ -25,6 +25,8 @@ def search():
         data = request.get_json()
         req = SearchRequest(**data)
 
+        logger.info(f"🔍 Search request - video_id: {req.video_id}, query: '{req.query}', type: {req.search_type}")
+
         # Validate search type
         if req.search_type not in ['visual', 'text', 'both']:
             return jsonify({'error': 'Invalid search_type'}), 400
@@ -41,6 +43,8 @@ def search():
                 req.search_type
             )
         )
+
+        logger.info(f"✅ Search complete - found {len(result.get('results', []))} results")
 
         return jsonify(result), 200
 

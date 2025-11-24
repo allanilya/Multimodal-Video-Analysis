@@ -38,6 +38,12 @@ class Config:
     # - 'gpt-4o': Best quality, more expensive
     # - 'gpt-4-turbo-preview': Original (expensive)
 
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')  # Multimodal with reasoning
+    # Alternative options:
+    # - 'gemini-2.5-flash': Best for video analysis with reasoning (recommended)
+    # - 'gemini-2.5-flash-lite': Fastest & cheapest, limited reasoning
+    # - 'gemini-1.5-flash': Older model, less capable
+
     EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2'
     CLIP_MODEL = 'openai/clip-vit-base-patch32'
 

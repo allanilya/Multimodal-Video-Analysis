@@ -151,10 +151,37 @@ class YouTubeService:
             # Use ffmpeg through yt-dlp to extract frame at specific time
             import subprocess
 
-            # Get video URL with yt-dlp
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+            # Get video URL with yt-dlp - request a specific video format
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'format': 'worst[ext=mp4]/worst[height>=144]/best[height<=480]'  # Get actual video, not storyboard
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                video_url = info['url']
+
+                # Get the direct video URL - filter for actual video formats
+                video_url = None
+                if 'url' in info and info.get('ext') not in ['jpg', 'png', 'webp']:
+                    video_url = info['url']
+                elif 'formats' in info and info['formats']:
+                    # Find first actual video format (not storyboard/image)
+                    for fmt in info['formats']:
+                        ext = fmt.get('ext', '')
+                        vcodec = fmt.get('vcodec', '')
+                        # Skip images/storyboards
+                        if ext in ['jpg', 'png', 'webp', 'mhtml']:
+                            continue
+                        if vcodec == 'none':
+                            continue
+                        if fmt.get('url'):
+                            video_url = fmt['url']
+                            logger.info(f"Selected format: {fmt.get('format_id')} ({fmt.get('ext')}, {fmt.get('height')}p)")
+                            break
+
+                if not video_url:
+                    logger.error(f"Could not extract video URL from info for {url}")
+                    return None
 
             # Use ffmpeg to extract frame at timestamp
             ffmpeg_cmd = [
