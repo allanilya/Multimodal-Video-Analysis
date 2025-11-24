@@ -45,7 +45,7 @@ class Config:
     # - 'gemini-1.5-flash': Older model, less capable
 
     EMBEDDING_MODEL = 'sentence-transformers/all-MiniLM-L6-v2'
-    CLIP_MODEL = 'openai/clip-vit-base-patch32'
+    CLIP_MODEL = 'openai/clip-vit-base-patch16'  # Balance between accuracy and speed
 
     # Processing
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 32))

@@ -67,12 +67,13 @@ class YouTubeService:
 
         ydl_opts = {
             'format': quality,  # Prioritize 480p or lower for speed
-            'outtmpl': str(output_path),
+            'outtmpl': str(output_path.with_suffix('')),  # Remove .mp4, yt-dlp adds it
             'quiet': True,
             'no_warnings': True,
             'no_playlist': True,
             'preferredcodec': 'mp4',
             'preferredquality': '480p',  # Lower quality = faster download
+            'restrictfilenames': True,  # Avoid special characters in filename
         }
 
         try:
